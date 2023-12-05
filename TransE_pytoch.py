@@ -146,7 +146,6 @@ class E(nn.Module):
         self.__data_init()
 
     def __data_init(self):
-        # embedding.weight (Tensor) -形状为(num_embeddings, embedding_dim)的嵌入中可学习的权值
         nn.init.xavier_uniform_(self.ent_embedding.weight.data) # Xavier 初始化
         nn.init.xavier_uniform_(self.rel_embedding.weight.data) # Xavier 初始化
         self.normalization_rel_embedding()
@@ -164,9 +163,12 @@ class E(nn.Module):
         self.ent_embedding.weight.data.copy_(torch.from_numpy(norm))
 
     def normalization_rel_embedding(self):
-        norm = self.rel_embedding.weight.detach().cpu().numpy()
-        norm = norm / np.sqrt(np.sum(np.square(norm), axis=1, keepdims=True))
-        self.rel_embedding.weight.data.copy_(torch.from_numpy(norm))  # 把词向量矩阵作为参数复制过去
+        norm = self.rel_embedding.weight.detach()
+        norm = F.normalize(norm, p=2, dim=1)
+        self.rel_embedding.weight.data.copy_(norm)
+        # norm = self.rel_embedding.weight.detach().cpu().numpy()
+        # norm = norm / np.sqrt(np.sum(np.square(norm), axis=1, keepdims=True))
+        # self.rel_embedding.weight.data.copy_(torch.from_numpy(norm))  # 把词向量矩阵作为参数复制过去
 
     def input_pre_transe(self, ent_vector, rel_vector):
         for i in range(self.entity_num):
@@ -178,7 +180,7 @@ class E(nn.Module):
         # 在 tensor 的指定维度操作就是对指定维度包含的元素进行操作，如果想要保持结果的维度不变，设置参数keepdim=True即可
         # 如 下面sum中 r_norm * h 结果是一个1024 *50的矩阵（2维张量） sum在dim的结果就变成了 1024的向量（1位张量） 如果想和r_norm对应元素两两相乘
         # 就需要sum的结果也是2维张量 因此需要使用keepdim= True报纸张量的维度不变
-        # 另外关于 dim 等于几表示张量的第几个维度，从0开始计数，可以理解为张量的最开始的第几个左括号，具体可以参考这个https://www.cnblogs.com/flix/p/11262606.html
+        # 另外关于 dim 等于几表示张量的第几个维度，从0开始计数，可以理解为张量的最开始的第几个左括号
         head = self.ent_embedding(h)
         rel = self.rel_embedding(r)
         tail = self.ent_embedding(t)
@@ -236,7 +238,7 @@ class E(nn.Module):
         # loss 计算正负三元组的距离，也就是（r+(d+)-(d-)）
         loss = self.loss_F(pos, neg, y)  # self.loss_F = nn.MarginRankingLoss(self.margin, reduction="mean").cuda()
 
-        ent_scale_loss = self.scale_loss(entity_embedding) # 不懂这个是干什么的
+        ent_scale_loss = self.scale_loss(entity_embedding)
         rel_scale_loss = self.scale_loss(relation_embedding)
         return loss + self.C * (ent_scale_loss / len(entity_embedding) + rel_scale_loss / len(relation_embedding))
 
@@ -442,11 +444,11 @@ class TransE:
             f1.write(str(self.train_loss) + "\t" + str(self.validation_loss))
 
     def update_triple_embedding(self, correct_sample, corrupted_sample):
-        self.optim.zero_grad()
-        loss = self.model(correct_sample, corrupted_sample)
+        self.optim.zero_grad()                                #将优化器的梯度初始化为零
+        loss = self.model(correct_sample, corrupted_sample)   #调用self.model来计算correct_sample 和 corrupted_sample 的损失
         self.loss += loss
-        loss.backward()
-        self.optim.step()
+        loss.backward()                                       #调用loss.backward()来计算损失的梯度
+        self.optim.step()                                     #调用self.optim.step()来更新模型的参数，执行梯度下降步骤
 
     def calculate_valid_loss(self, correct_sample, corrupted_sample):
         loss = self.model(correct_sample, corrupted_sample)
